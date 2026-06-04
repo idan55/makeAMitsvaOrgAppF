@@ -8,45 +8,30 @@ function Header() {
   const navigate = useNavigate();
 
   return (
-    <header
-      style={{
-        display: "flex",
-        alignItems: "center",
-        gap: "12px",
-        justifyContent: "space-between",
-      }}
-    >
-      <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+    <header className="site-header">
+      <div className="site-nav">
         <NavLink
           to="/"
-          aria-label="Go to home"
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: "10px",
-            marginRight: "20px",
-            textDecoration: "none",
-            color: "inherit",
-          }}
+          className="brand-link"
         >
           <img
             src="/logo.png"
             alt="Make A Mitsva logo"
-            style={{ width: "42px", height: "42px", objectFit: "contain" }}
+            className="brand-logo"
           />
-          <h1 style={{ margin: 0 }}>Make A Mitsva</h1>
+          <h1>Make A Mitsva</h1>
         </NavLink>
 
-        <NavLink to="/" style={{ marginRight: "12px" }}>
+        <NavLink to="/">
           Home
         </NavLink>
 
         {!user && (
           <>
-            <NavLink to="/register" style={{ marginRight: "12px" }}>
+            <NavLink to="/register">
               Register
             </NavLink>
-            <NavLink to="/login" style={{ marginRight: "12px" }}>
+            <NavLink to="/login">
               Login
             </NavLink>
           </>
@@ -54,17 +39,14 @@ function Header() {
 
         {user && (
           <>
-            <NavLink to="/myaccount" style={{ marginRight: "12px" }}>
-              <span className="nav-label-full">My Account</span>
-              <span className="nav-label-short">Account</span>
+            <NavLink to="/myaccount">
+              My Account
             </NavLink>
             {user.role === "admin" && (
-              <NavLink
-                to="/admin"
-                style={{ marginRight: "12px", color: "#e53935" }}
-              >
-                Admin
-              </NavLink>
+              <>
+                <NavLink to="/admin">Admin</NavLink>
+                <NavLink to="/admin/identity">Identity Reviews</NavLink>
+              </>
             )}
           </>
         )}
@@ -76,17 +58,7 @@ function Header() {
             logout();
             navigate("/");
           }}
-          style={{
-            padding: "6px 12px",
-            borderRadius: "6px",
-            cursor: "pointer",
-            fontWeight: "bold",
-            border: "1px solid #c62828",
-            background: "#e53935",
-            color: "white",
-            boxShadow: "0 2px 6px rgba(0,0,0,0.2)",
-            whiteSpace: "nowrap",
-          }}
+          className="logout-button"
         >
           Logout
         </button>
