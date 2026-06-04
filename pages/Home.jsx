@@ -13,6 +13,7 @@ import {
   getMe,
 } from "../src/Api";
 import { useAuth } from "../src/Authcontext";
+import { getSocket } from "../src/socket";
 
 function Home() {
   const [loading, setLoading] = useState(true);
@@ -45,7 +46,6 @@ function Home() {
   const [activeChat, setActiveChat] = useState(null);
   const [isChatOpen, setIsChatOpen] = useState(false);
   const [chatNotification, setChatNotification] = useState("");
-  const pollingRef = useRef(null);
   const loadedNotifications = useRef(false);
   const markChatSeen = (chatId, forcedId) => {
     if (!chatId) return;
@@ -62,6 +62,42 @@ function Home() {
   };
 
   const itemRefs = useRef({});
+
+  const upsertChatSummary = (previous, payload) => {
+    const chatId = payload?.chatId || payload?.id;
+    if (!chatId) return previous;
+
+    const nextSummary = {
+      id: chatId,
+      requestId: payload.requestId || null,
+      requestTitle: payload.requestTitle || "Request",
+      participants: payload.participants || [],
+      lastMessage: payload.message || payload.lastMessage || null,
+      updatedAt:
+        payload.updatedAt ||
+        payload.message?.createdAt ||
+        new Date().toISOString(),
+      isClosed: Boolean(payload.isClosed),
+    };
+
+    const current = Array.isArray(previous) ? [...previous] : [];
+    const existingIndex = current.findIndex((chat) => chat.id === chatId);
+    if (existingIndex >= 0) {
+      current[existingIndex] = {
+        ...current[existingIndex],
+        ...nextSummary,
+      };
+    } else {
+      current.push(nextSummary);
+    }
+
+    current.sort(
+      (left, right) =>
+        new Date(right.updatedAt || 0).getTime() -
+        new Date(left.updatedAt || 0).getTime()
+    );
+    return current;
+  };
 
   const refreshUserFromServer = async (token) => {
     try {
@@ -269,7 +305,6 @@ function Home() {
   }, [currentUser?.isBanned]);
 
   useEffect(() => {
-    let timer;
     async function loadChats() {
       const token = localStorage.getItem("token");
       if (!token) return;
@@ -278,11 +313,10 @@ function Home() {
         setChatSummaries(chats || []);
 
         if (!loadedNotifications.current) {
-          chats.forEach((c) => {
-            const last = c.lastMessage;
-            const lastId = last?._id || last?.createdAt;
+          chats.forEach((chat) => {
+            const lastId = chat.lastMessage?._id || chat.lastMessage?.createdAt;
             if (lastId) {
-              lastNotifiedRef.current[c.id] = lastId;
+              lastNotifiedRef.current[chat.id] = lastId;
             }
           });
           localStorage.setItem(
@@ -290,60 +324,6 @@ function Home() {
             JSON.stringify(lastNotifiedRef.current)
           );
           loadedNotifications.current = true;
-          return;
-        }
-
-        const currentUserId = currentUser?.id || currentUser?._id;
-        for (const c of chats) {
-          const last = c.lastMessage;
-          if (!last) continue;
-          const senderId =
-            typeof last.sender === "string" ? last.sender : last.sender?._id;
-          if (!senderId || senderId === currentUserId) {
-            const lastId = last._id || last.createdAt;
-            if (lastId) {
-              lastNotifiedRef.current[c.id] = lastId;
-            }
-            continue;
-          }
-
-          const title = c.requestTitle;
-          const lastId = last._id || last.createdAt;
-          if (!title || !lastId) continue;
-
-          if (activeChat?.chatId === c.id && isChatOpen) {
-            lastNotifiedRef.current[c.id] = lastId;
-            localStorage.setItem(
-              "lastNotifiedChatMsg",
-              JSON.stringify(lastNotifiedRef.current)
-            );
-            if (chatNotification && chatNotification.chatId === c.id) {
-              setChatNotification("");
-            }
-            continue;
-          }
-
-          if (lastNotifiedRef.current[c.id] === lastId) continue;
-
-          const otherUser = (c.participants || []).find(
-            (p) => (p._id || p.id) && (p._id || p.id) !== currentUserId
-          );
-
-          setChatNotification({
-            text: `You have a new message about "${title}"`,
-            chatId: c.id,
-            requestId: c.requestId,
-            requestTitle: title,
-            otherUser,
-            participants: c.participants || [],
-            lastId,
-          });
-          lastNotifiedRef.current[c.id] = lastId;
-          localStorage.setItem(
-            "lastNotifiedChatMsg",
-            JSON.stringify(lastNotifiedRef.current)
-          );
-          break;
         }
       } catch (err) {
         console.error("load chats error", err);
@@ -351,9 +331,87 @@ function Home() {
     }
 
     loadChats();
-    timer = setInterval(loadChats, 5000);
-    return () => timer && clearInterval(timer);
   }, [currentUser]);
+
+  useEffect(() => {
+    const token = localStorage.getItem("token");
+    if (!token || !currentUser) return;
+
+    const socket = getSocket(token);
+    if (!socket) return;
+
+    const handleIncomingMessage = (payload) => {
+      const currentUserId = currentUser?.id || currentUser?._id;
+      const senderId =
+        typeof payload?.message?.sender === "string"
+          ? payload.message.sender
+          : payload?.message?.sender?._id;
+      const messageId = payload?.message?._id || payload?.message?.createdAt;
+
+      setChatSummaries((prev) => upsertChatSummary(prev, payload));
+
+      if (!senderId || senderId === currentUserId || !messageId) {
+        if (messageId && payload?.chatId) {
+          lastNotifiedRef.current[payload.chatId] = messageId;
+          localStorage.setItem(
+            "lastNotifiedChatMsg",
+            JSON.stringify(lastNotifiedRef.current)
+          );
+        }
+        return;
+      }
+
+      if (activeChat?.chatId === payload.chatId && isChatOpen) {
+        markChatSeen(payload.chatId, messageId);
+        setChatNotification((current) =>
+          current?.chatId === payload.chatId ? "" : current
+        );
+        return;
+      }
+
+      if (lastNotifiedRef.current[payload.chatId] === messageId) {
+        return;
+      }
+
+      const otherUser = (payload.participants || []).find(
+        (participant) =>
+          (participant._id || participant.id) &&
+          (participant._id || participant.id) !== currentUserId
+      );
+
+      setChatNotification({
+        text: `You have a new message about "${payload.requestTitle || "a request"}"`,
+        chatId: payload.chatId,
+        requestId: payload.requestId,
+        requestTitle: payload.requestTitle,
+        otherUser,
+        participants: payload.participants || [],
+        lastId: messageId,
+      });
+      lastNotifiedRef.current[payload.chatId] = messageId;
+      localStorage.setItem(
+        "lastNotifiedChatMsg",
+        JSON.stringify(lastNotifiedRef.current)
+      );
+    };
+
+    const handleClosed = (payload) => {
+      setChatSummaries((prev) => upsertChatSummary(prev, payload));
+      if (activeChat?.chatId === payload?.chatId) {
+        setActiveChat((current) =>
+          current ? { ...current, isReadOnly: true } : current
+        );
+      }
+    };
+
+    socket.on("chat:message", handleIncomingMessage);
+    socket.on("chat:closed", handleClosed);
+
+    return () => {
+      socket.off("chat:message", handleIncomingMessage);
+      socket.off("chat:closed", handleClosed);
+    };
+  }, [activeChat, currentUser, isChatOpen]);
 
   useEffect(() => {
     if (activeChat && isChatOpen) {
