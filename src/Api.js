@@ -111,6 +111,41 @@ export async function adminUnbanUser(id, token) {
   return data.user || data.updatedUser || data.data || data;
 }
 
+export async function adminGetPendingIdentityReviews(token) {
+  const res = await fetch(`${API_URL}/admin/identity/pending`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  const data = await res.json();
+  if (!res.ok) {
+    throw new Error(data.error || "Failed to load identity reviews");
+  }
+  return data.users;
+}
+
+export async function adminApproveIdentity(id, token) {
+  const res = await fetch(`${API_URL}/admin/users/${id}/identity/approve`, {
+    method: "PATCH",
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || "Failed to approve identity");
+  return data.user || data;
+}
+
+export async function adminRejectIdentity(id, token, reason) {
+  const res = await fetch(`${API_URL}/admin/users/${id}/identity/reject`, {
+    method: "PATCH",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify({ reason }),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || "Failed to reject identity");
+  return data.user || data;
+}
+
 export async function adminGetRequests(token) {
   const res = await fetch(`${API_URL}/admin/requests`, {
     headers: { Authorization: `Bearer ${token}` },
@@ -159,6 +194,41 @@ export async function createRequest({
 
   const data = await res.json();
   if (!res.ok) throw new Error(data.error || "Failed to create request");
+  return data;
+}
+
+export async function submitIdentityVerification({ documentFile, selfieFile, videoFile, token }) {
+  const formData = new FormData();
+  formData.append("document", documentFile);
+  formData.append("selfie", selfieFile);
+  formData.append("video", videoFile);
+
+  const res = await fetch(`${API_URL}/identity/manual`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+    body: formData,
+  });
+
+  const data = await res.json();
+  if (!res.ok) {
+    const error = new Error(data.error || "Failed to submit identity verification");
+    error.identityStatus = data.identityStatus;
+    throw error;
+  }
+  return data;
+}
+
+export async function getIdentityStatus(token) {
+  const res = await fetch(`${API_URL}/identity/status`, {
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+  });
+
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || "Failed to load identity status");
   return data;
 }
 

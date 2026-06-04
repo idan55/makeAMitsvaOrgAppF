@@ -6,6 +6,8 @@ import {
   adminGetUsers,
   adminBanUser,
   adminUnbanUser,
+  adminApproveIdentity,
+  adminRejectIdentity,
   adminGetRequests,
   adminDeleteRequest,
 } from "../src/Api";
@@ -101,6 +103,28 @@ function Admin() {
     }
   }
 
+  async function handleApproveIdentity(id) {
+    const freshToken = localStorage.getItem("token");
+    try {
+      const updated = await adminApproveIdentity(id, freshToken);
+      setUsers((prev) => prev.map((u) => (u._id === id ? { ...u, ...updated } : u)));
+    } catch (err) {
+      alert(err.message || "Failed to approve identity");
+    }
+  }
+
+  async function handleRejectIdentity(id) {
+    const reason = window.prompt("Why reject this identity verification?", "Document or selfie could not be verified");
+    if (reason == null) return;
+    const freshToken = localStorage.getItem("token");
+    try {
+      const updated = await adminRejectIdentity(id, freshToken, reason);
+      setUsers((prev) => prev.map((u) => (u._id === id ? { ...u, ...updated } : u)));
+    } catch (err) {
+      alert(err.message || "Failed to reject identity");
+    }
+  }
+
   async function handleDeleteRequest(id) {
     if (!window.confirm("Delete this request?")) return;
     try {
@@ -136,9 +160,33 @@ function Admin() {
                     <div style={{ fontSize: "12px", color: "#555" }}>
                       Role: {u.role} · Flags: {u.flagsCount || 0} · {u.isBanned ? "BANNED — contact support to unban: makeamitsva@gmail.com" : "Active"}
                     </div>
+                    <div style={{ fontSize: "12px", color: "#555" }}>
+                      Identity: {u.identityStatus || "not_started"}
+                      {u.identitySubmittedAt ? ` · Submitted: ${new Date(u.identitySubmittedAt).toLocaleDateString()}` : ""}
+                    </div>
+                    {(u.identityDocumentUrl || u.identitySelfieUrl || u.identityVideoUrl) && (
+                      <div style={{ display: "flex", gap: "8px", marginTop: "6px", fontSize: "12px" }}>
+                        {u.identityDocumentUrl && <a href={u.identityDocumentUrl} target="_blank" rel="noreferrer">ID document</a>}
+                        {u.identitySelfieUrl && <a href={u.identitySelfieUrl} target="_blank" rel="noreferrer">Selfie</a>}
+                        {u.identityVideoUrl && <a href={u.identityVideoUrl} target="_blank" rel="noreferrer">Name video</a>}
+                      </div>
+                    )}
+                    {u.identityLastError && (
+                      <div style={{ fontSize: "12px", color: "#b00020" }}>{u.identityLastError}</div>
+                    )}
                   </div>
                 </div>
                 <div style={{ display: "flex", gap: "8px" }}>
+                  {u.identityStatus === "pending" && (
+                    <>
+                      <button onClick={() => handleApproveIdentity(u._id)} style={{ background: "#2563eb", color: "#fff", border: "none", padding: "6px 10px", borderRadius: "6px" }}>
+                        Approve ID
+                      </button>
+                      <button onClick={() => handleRejectIdentity(u._id)} style={{ background: "#f59e0b", color: "#111", border: "none", padding: "6px 10px", borderRadius: "6px" }}>
+                        Reject ID
+                      </button>
+                    </>
+                  )}
                   {!u.isBanned ? (
                     <button onClick={() => handleBan(u._id)} style={{ background: "#e53935", color: "#fff", border: "none", padding: "6px 10px", borderRadius: "6px" }}>
                       Ban

@@ -26,6 +26,11 @@ function Login() {
     try {
       const data = await LoginUser({ email, password });
       login(data);
+      if (data.user?.identityStatus !== "verified") {
+        setMessage("Identity verification required. Redirecting...");
+        navigate("/verify-identity");
+        return;
+      }
       navigate("/");
     } catch (err) {
       const msg = (err?.message || "").toLowerCase();
