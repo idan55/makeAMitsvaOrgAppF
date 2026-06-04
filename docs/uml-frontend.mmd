@@ -1,0 +1,63 @@
+flowchart LR
+  subgraph Entry
+    Main[Main]
+    App[App]
+    AuthProvider[AuthProvider]
+    AuthContext[AuthContext]
+  end
+
+  subgraph Pages
+    Home[Home]
+    Register[Register]
+    Login[Login]
+    Myaccount[Myaccount]
+    Admin[Admin]
+  end
+
+  subgraph Shared
+    Header[Header]
+    Footer[Footer]
+    Map[Map]
+    ChatWindow[ChatWindow]
+  end
+
+  subgraph Services
+    Api[Api]
+    PhoneUtils[PhoneUtils]
+  end
+
+  Main --> App
+  App --> AuthProvider
+  AuthProvider --> AuthContext
+  AuthProvider -. getMe() .-> Api
+
+  App --> Home
+  App --> Register
+  App --> Login
+  App --> Myaccount
+  App --> Admin
+
+  Home --> Header
+  Home --> Footer
+  Home --> Map
+  Home --> ChatWindow
+  Home -. requests+chat .-> Api
+
+  Register --> Header
+  Register --> Footer
+  Register -. register/login .-> Api
+  Register -. normalizePhone .-> PhoneUtils
+
+  Login --> Header
+  Login --> Footer
+  Login -. login .-> Api
+
+  Myaccount --> Header
+  Myaccount --> Footer
+  Myaccount --> ChatWindow
+  Myaccount -. account+chat .-> Api
+  Myaccount -. formatPhoneForDisplay .-> PhoneUtils
+
+  Admin --> Header
+  Admin --> Footer
+  Admin -. admin APIs .-> Api
