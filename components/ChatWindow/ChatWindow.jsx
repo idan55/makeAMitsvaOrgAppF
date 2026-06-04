@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import "./ChatWindow.css";
 import { API_URL, completeRequest, flagUserInChat } from "../../src/Api";
+import { getSocket } from "../../src/socket";
 
 function ChatWindow({
   chatId,
@@ -32,6 +33,7 @@ function ChatWindow({
   const lastOtherMessageRef = useRef(null);
   const initialLoadRef = useRef(true);
   const completionTimerRef = useRef(null);
+  const joinedChatRef = useRef(null);
 
   const currentUserId = currentUser?._id || currentUser?.id;
   const otherUserAvatar = otherUser?.profileImage || "/logo.png";
@@ -76,10 +78,9 @@ function ChatWindow({
 
   useEffect(() => {
     if (!chatId) return;
+    let cancelled = false;
 
-    let intervalId;
-
-    async function fetchMessages({ initial = false } = {}) {
+    async function fetchMessages() {
       try {
         const token = localStorage.getItem("token");
 
@@ -96,53 +97,102 @@ function ChatWindow({
         }
 
         const msgs = Array.isArray(data.messages) ? data.messages : [];
+        if (cancelled) return;
         setMessages(msgs);
         setServerClosed(Boolean(data.isClosed));
         setHasFlagged(Boolean(data.hasFlagged));
-
-        if (initial && msgs.length > 0) {
-          const latest = msgs[msgs.length - 1];
-          lastOtherMessageRef.current = latest._id || msgs.length;
-          return;
-        }
-
-        if (msgs.length > 0) {
-          const latest = msgs[msgs.length - 1];
-          const senderId =
-            typeof latest.sender === "string" ? latest.sender : latest.sender?._id;
-          const currentUserIdLocal = currentUser?._id || currentUser?.id;
-
-          if (
-            senderId &&
-            senderId !== currentUserIdLocal &&
-            lastOtherMessageRef.current !== (latest._id || msgs.length)
-          ) {
-            lastOtherMessageRef.current = latest._id || msgs.length;
-            onNewMessage?.({
-              from: latest.sender?.name || otherUser?.name || "Someone",
-              requestTitle,
-              chatId,
-              requestId: otherUser?._id || otherUser?.id,
-              otherUser,
-              messageId: latest._id || latest.createdAt,
-            });
-          }
-        }
+        const latest = msgs[msgs.length - 1];
+        lastOtherMessageRef.current = latest?._id || latest?.createdAt || null;
       } catch (err) {
         console.error("Error fetching messages:", err);
       } finally {
-        if (initial) {
+        if (!cancelled) {
           setLoading(false);
           initialLoadRef.current = false;
         }
       }
     }
 
-    fetchMessages({ initial: true });
-    intervalId = setInterval(() => fetchMessages({ initial: false }), 800);
+    fetchMessages();
 
-    return () => clearInterval(intervalId);
+    return () => {
+      cancelled = true;
+    };
   }, [chatId]);
+
+  useEffect(() => {
+    if (!chatId) return;
+
+    const token = localStorage.getItem("token");
+    const socket = getSocket(token);
+    if (!socket) return;
+
+    socket.emit("chat:join", { chatId }, (response) => {
+      if (response?.error) {
+        console.error("Failed to join chat room:", response.error);
+      } else {
+        joinedChatRef.current = chatId;
+      }
+    });
+
+    const handleMessage = (payload) => {
+      if (payload?.chatId !== chatId || !payload?.message) return;
+
+      setMessages((prev) => {
+        const next = Array.isArray(prev) ? [...prev] : [];
+        const existingIndex = next.findIndex(
+          (message) => message._id && message._id === payload.message._id
+        );
+        if (existingIndex >= 0) {
+          next[existingIndex] = payload.message;
+        } else {
+          next.push(payload.message);
+        }
+        return next;
+      });
+      setServerClosed(Boolean(payload.isClosed));
+
+      const messageId = payload.message._id || payload.message.createdAt;
+      const senderId =
+        typeof payload.message.sender === "string"
+          ? payload.message.sender
+          : payload.message.sender?._id;
+
+      if (
+        senderId &&
+        senderId !== currentUserId &&
+        lastOtherMessageRef.current !== messageId
+      ) {
+        lastOtherMessageRef.current = messageId;
+        onNewMessage?.({
+          from: payload.message.sender?.name || otherUser?.name || "Someone",
+          requestTitle: payload.requestTitle || requestTitle,
+          chatId,
+          requestId,
+          otherUser,
+          messageId,
+        });
+      }
+    };
+
+    const handleClosed = (payload) => {
+      if (payload?.chatId === chatId) {
+        setServerClosed(true);
+      }
+    };
+
+    socket.on("chat:message", handleMessage);
+    socket.on("chat:closed", handleClosed);
+
+    return () => {
+      socket.off("chat:message", handleMessage);
+      socket.off("chat:closed", handleClosed);
+      if (joinedChatRef.current) {
+        socket.emit("chat:leave", { chatId: joinedChatRef.current });
+        joinedChatRef.current = null;
+      }
+    };
+  }, [chatId, currentUserId, onNewMessage, otherUser, requestId, requestTitle]);
 
   async function handleSend(e) {
     e.preventDefault();
@@ -152,27 +202,23 @@ function ChatWindow({
     try {
       setSending(true);
       const token = localStorage.getItem("token");
-
-      const res = await fetch(`${API_URL}/chats/${chatId}/messages`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: token ? `Bearer ${token}` : undefined,
-        },
-        body: JSON.stringify({ text: textToSend, attachments }),
-      });
-
-      const data = await res.json();
-      if (!res.ok) {
-        console.error("Error sending message:", data);
-        alert(data.error || "Failed to send message");
-        return;
+      const socket = getSocket(token);
+      if (!socket) {
+        throw new Error("No active socket connection");
       }
 
-      if (Array.isArray(data.messages)) {
-        setMessages(data.messages);
-      } else if (data.message) {
-        setMessages((prev) => [...prev, data.message]);
+      const result = await new Promise((resolve) => {
+        socket.emit("chat:send-message", {
+          chatId,
+          text: textToSend,
+          attachments,
+        }, resolve);
+      });
+
+      if (result?.error) {
+        console.error("Error sending message:", result);
+        alert(result.error || "Failed to send message");
+        return;
       }
 
       setText("");

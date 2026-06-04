@@ -19,6 +19,7 @@ function Header() {
       <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
         <NavLink
           to="/"
+          aria-label="Go to home"
           style={{
             display: "flex",
             alignItems: "center",
@@ -54,7 +55,8 @@ function Header() {
         {user && (
           <>
             <NavLink to="/myaccount" style={{ marginRight: "12px" }}>
-              My Account
+              <span className="nav-label-full">My Account</span>
+              <span className="nav-label-short">Account</span>
             </NavLink>
             {user.role === "admin" && (
               <NavLink

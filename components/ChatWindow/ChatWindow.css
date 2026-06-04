@@ -250,8 +250,41 @@
   color: #fff;
 }
 
-.chat-reminder button:last-of-type {
+  .chat-reminder button:last-of-type {
   background: #e5e7eb;
   color: #111827;
+}
+
+@media (max-width: 640px) {
+  .chat-window,
+  .chat-window.expanded {
+    left: 0;
+    right: 0;
+    bottom: 0;
+    width: 100vw;
+    max-width: none;
+    height: 100dvh;
+    max-height: 100dvh;
+    border-radius: 0;
+    box-shadow: none;
+  }
+
+  .chat-header {
+    padding-top: calc(12px + env(safe-area-inset-top, 0px));
+  }
+
+  .chat-messages {
+    padding: 10px;
+  }
+
+  .chat-input-area {
+    padding-bottom: calc(8px + env(safe-area-inset-bottom, 0px));
+  }
+
+  .chat-reminder {
+    left: 10px;
+    right: 10px;
+    bottom: calc(86px + env(safe-area-inset-bottom, 0px));
+  }
 }
   
