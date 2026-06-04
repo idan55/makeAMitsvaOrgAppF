@@ -129,7 +129,11 @@ function Home() {
       setSuccess(data.message || "Request successfully created ✅");
     } catch (err) {
       console.error("Error creating request:", err);
-      setError(err.message || "Failed to create request");
+      setError(
+        err.message === "Identity verification required"
+          ? "Please verify your identity before creating a request."
+          : err.message || "Failed to create request"
+      );
       setSuccess("");
     }
   }
@@ -168,7 +172,11 @@ function Home() {
       );
     } catch (err) {
       console.error("wantToHelp error:", err);
-      setError(err.message || "Failed to mark as helper");
+      setError(
+        err.message === "Identity verification required"
+          ? "Please verify your identity before helping with a request."
+          : err.message || "Failed to mark as helper"
+      );
     }
   }
 

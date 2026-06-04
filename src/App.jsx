@@ -5,6 +5,8 @@ import Register from "../pages/Register";
 import Myaccount from "../pages/Myaccount";
 import Login from "../pages/Login";
 import Admin from "../pages/Admin";
+import AdminIdentityReviews from "../pages/AdminIdentityReviews";
+import VerifyIdentity from "../pages/VerifyIdentity";
 
 function App() {
   return (
@@ -15,7 +17,9 @@ function App() {
           <Route path="/register" element={<Register />} />
           <Route path="/myaccount" element={<Myaccount />} />
           <Route path="/login" element={<Login />} />
+          <Route path="/verify-identity" element={<VerifyIdentity />} />
           <Route path="/admin" element={<Admin />} />
+          <Route path="/admin/identity" element={<AdminIdentityReviews />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </BrowserRouter>

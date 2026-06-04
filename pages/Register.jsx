@@ -176,7 +176,11 @@ function Register() {
       login(loginResponse);
 
       setPhone(normalizedPhone);
-      setFeedback({ type: "success", text: "Account created and logged in!" });
+      setFeedback({ type: "success", text: "Account created. Please verify your identity." });
+      if (loginResponse.user?.identityStatus !== "verified") {
+        navigate("/verify-identity");
+        return;
+      }
       navigate("/");
     } catch (err) {
       console.error("❌ Registration error:", err);
